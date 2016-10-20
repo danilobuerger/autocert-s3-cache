@@ -1,3 +1,5 @@
+// Copyright (c) 2016 Danilo Bürger <info@danilobuerger.de>
+
 package s3cache
 
 import (
