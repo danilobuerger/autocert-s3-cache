@@ -99,9 +99,10 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
 
 func (c *Cache) put(key string, data []byte) error {
 	_, err := c.s3.PutObject(&s3.PutObjectInput{
-		Bucket: aws.String(c.bucket),
-		Key:    aws.String(key),
-		Body:   bytes.NewReader(data),
+		Bucket:               aws.String(c.bucket),
+		Key:                  aws.String(key),
+		Body:                 bytes.NewReader(data),
+		ServerSideEncryption: aws.String("AES256"),
 	})
 	return err
 }
