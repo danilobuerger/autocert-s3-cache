@@ -4,6 +4,7 @@ package s3cache
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"net/http"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"golang.org/x/crypto/acme/autocert"
-	"golang.org/x/net/context"
 )
 
 // Logger logs.
