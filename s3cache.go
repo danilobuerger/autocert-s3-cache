@@ -1,5 +1,6 @@
 // Copyright (c) 2016 Danilo Bürger <info@danilobuerger.de>
 
+// package s3cache implements a https://godoc.org/golang.org/x/crypto/acme/autocert Cache to store keys within in a S3 bucket. If the key does not exist, it will be created automatically.
 package s3cache
 
 import (
