@@ -7,6 +7,7 @@ import (
 	"context"
 	"io/ioutil"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
@@ -16,34 +17,78 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// Logger logs.
+// Logger for outputing logs
 type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
+// Making sure that we're adhering to the autocert.Cache interface
 var _ autocert.Cache = (*Cache)(nil)
 
-// Cache provides an autocert s3 cache.
+// Cache provides a s3 backend to the autocert cache.
 type Cache struct {
 	bucket string
+	prefix string
 	s3     s3iface.S3API
 
 	Logger Logger
 }
 
-// New creates a autocert s3 cache.
-func New(region, bucket string) (*Cache, error) {
-	sess, err := session.NewSession(&aws.Config{
-		CredentialsChainVerboseErrors: aws.Bool(true),
-		Region: aws.String(region),
-	})
-	if err != nil {
-		return nil, err
+// OptFunc is for options passed in to New
+type OptFunc func(*options)
+
+// options holds options that can be used while making a new Cache object
+type options struct {
+	prefix  string
+	session s3iface.S3API
+}
+
+// returns an options object with defaults
+func newOptions() *options {
+	o := new(options)
+
+	// defaults
+	o.prefix = "/"
+	return o
+}
+
+// KeyPrefix adds an S3 key prefix to the certs stored
+func KeyPrefix(prefix string) OptFunc {
+	return func(o *options) {
+		o.prefix = strings.TrimRight(prefix, "/") + "/"
+	}
+}
+
+// s3session is for overwriting the s3 interface during testing
+func s3session(session s3iface.S3API) OptFunc {
+	return func(o *options) {
+		o.session = session
+	}
+}
+
+// New creates an s3 interface to the autocert cache.
+func New(region, bucket string, opts ...OptFunc) (*Cache, error) {
+
+	option := newOptions()
+	for _, opt := range opts {
+		opt(option)
+	}
+
+	if option.session == nil {
+		sess, err := session.NewSession(&aws.Config{
+			CredentialsChainVerboseErrors: aws.Bool(true),
+			Region: aws.String(region),
+		})
+		if err != nil {
+			return nil, err
+		}
+		option.session = s3.New(sess)
 	}
 
 	return &Cache{
 		bucket: bucket,
-		s3:     s3.New(sess),
+		prefix: option.prefix,
+		s3:     option.session,
 	}, nil
 }
 
@@ -51,7 +96,7 @@ func (c *Cache) log(format string, v ...interface{}) {
 	if c.Logger == nil {
 		return
 	}
-	c.Logger.Printf(format, v)
+	c.Logger.Printf(format, v...)
 }
 
 func (c *Cache) get(key string) ([]byte, error) {
@@ -69,7 +114,8 @@ func (c *Cache) get(key string) ([]byte, error) {
 
 // Get returns a certificate data for the specified key.
 func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
-	c.log("Cache Get %s", key)
+	key = c.prefix + key
+	c.log("S3 Cache Get %s", key)
 
 	var (
 		data []byte
@@ -109,7 +155,8 @@ func (c *Cache) put(key string, data []byte) error {
 
 // Put stores the data in the cache under the specified key.
 func (c *Cache) Put(ctx context.Context, key string, data []byte) error {
-	c.log("Cache Put %s", key)
+	key = c.prefix + key
+	c.log("S3 Cache Put %s", key)
 
 	var (
 		err  error
@@ -140,6 +187,7 @@ func (c *Cache) delete(key string) error {
 
 // Delete removes a certificate data from the cache under the specified key.
 func (c *Cache) Delete(ctx context.Context, key string) error {
+	key = c.prefix + key
 	c.log("Cache Delete %s", key)
 
 	var (
