@@ -6,12 +6,15 @@ package s3cache
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -41,6 +44,8 @@ type OptFunc func(*options)
 // options holds options that can be used while making a new Cache object
 type options struct {
 	prefix  string
+	id      string
+	secret  string
 	session s3iface.S3API
 }
 
@@ -53,6 +58,13 @@ func newOptions() *options {
 	return o
 }
 
+func UserPass(id, secret string) OptFunc {
+	return func(o *options) {
+		o.id = id
+		o.secret = secret
+	}
+}
+
 // KeyPrefix adds an S3 key prefix to the certs stored
 func KeyPrefix(prefix string) OptFunc {
 	return func(o *options) {
@@ -60,11 +72,95 @@ func KeyPrefix(prefix string) OptFunc {
 	}
 }
 
-// s3session is for overwriting the s3 interface during testing
-func s3session(session s3iface.S3API) OptFunc {
-	return func(o *options) {
-		o.session = session
+type dsnParts struct {
+	id, secret             string
+	region, bucket, prefix string
+}
+
+// parseS3DSN can parse the following URIs
+// the s3-<region> is always optional.
+//
+// s3://<bucket>.s3-<region>.amazonaws.com/<key>
+// s3://<bucket>.s3.amazonaws.com/<key>
+// s3://s3.amazonaws.com/<bucket>/<key>
+// s3://s3-<region>.amazonaws.com/<bucket>/<key>
+// s3://<username>:@<bucket>.s3.amazonaws.com/<key>
+// s3://<username>:@s3.amazonaws.com/<bucket>/<key>
+// s3://<username>:<password>@<bucket>.s3.amazonaws.com/<key>
+// s3://<username>:<password>@s3.amazonaws.com/<bucket>/<key>
+func parseS3DSN(dsn string) (dsnParts, error) {
+	rtn := dsnParts{}
+	rtn.region = "us-east-1" // default
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return rtn, fmt.Errorf("url parse: %v", err)
 	}
+
+	if strings.ToLower(u.Scheme) != "s3" {
+		return rtn, fmt.Errorf("expecting a s3:// scheme")
+	}
+
+	if u.User != nil {
+		rtn.id = u.User.Username()
+		rtn.secret, _ = u.User.Password()
+	}
+
+	hparts := strings.Split(u.Hostname(), ".")
+
+	// check to see if its just a bucket
+	if len(hparts) == 1 {
+		rtn.bucket = hparts[0]
+	}
+
+	// check to see if its a s3 domain
+	// (where the bucket can be attached as a subdomain)
+
+	if len(hparts) >= 2 {
+		if strings.Join(hparts[len(hparts)-2:], ".") != "amazonaws.com" {
+			rtn.bucket = u.Hostname()
+		} else {
+			// check for region
+			switch region := hparts[len(hparts)-3]; region {
+			case "s3":
+				// nothing....
+			default:
+				if len(region) > 3 && region[:3] == "s3-" {
+					rtn.region = region[3:]
+				} else {
+					return rtn, fmt.Errorf("the region doesn't appear to be correct")
+				}
+			}
+
+			// check for bucket name in domain
+			if len(hparts[:len(hparts)-2]) > 1 {
+				rtn.bucket = strings.Join(hparts[:len(hparts)-3], ".")
+			}
+		}
+	}
+
+	rtn.prefix = u.Path
+	if len(rtn.bucket) == 0 {
+		slash := strings.Index(rtn.prefix[1:], "/")
+		rtn.bucket = (rtn.prefix[1:])[:slash]
+		rtn.prefix = rtn.prefix[slash+1:]
+	}
+
+	return rtn, nil
+}
+
+// NewDSN returns a s3 interface to the autocert cache based
+// on a standard S3 DSN. The path cannot be overwritten
+func NewDSN(dsn string, opts ...OptFunc) (*Cache, error) {
+	p, err := parseS3DSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parsing DSN: %v", err)
+	}
+
+	// pass in the access id and secret first so that
+	// they can be overwritten
+	opts = append([]OptFunc{UserPass(p.id, p.secret), KeyPrefix(p.prefix)}, opts...)
+	return New(p.region, p.bucket, opts...)
 }
 
 // New creates an s3 interface to the autocert cache.
@@ -76,12 +172,18 @@ func New(region, bucket string, opts ...OptFunc) (*Cache, error) {
 	}
 
 	if option.session == nil {
-		sess, err := session.NewSession(&aws.Config{
+		awsOptions := &aws.Config{
 			CredentialsChainVerboseErrors: aws.Bool(true),
 			Region: aws.String(region),
-		})
+		}
+		if len(option.id) > 0 || len(option.secret) > 0 {
+			awsOptions = awsOptions.WithCredentials(
+				credentials.NewStaticCredentials(option.id, option.secret, ""),
+			)
+		}
+		sess, err := session.NewSession(awsOptions)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("AWS session: %v", err)
 		}
 		option.session = s3.New(sess)
 	}
