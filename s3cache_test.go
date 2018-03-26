@@ -88,44 +88,21 @@ func TestCache(t *testing.T) {
 	assert.Equal(t, autocert.ErrCacheMiss, err)
 }
 
-func TestCacheWithOption(t *testing.T) {
-	cache, err := New("", "my-bucket", s3session(&testS3{cache: map[string][]byte{}}))
-	assert.NoError(t, err)
-	ctx := context.Background()
-
-	assert.Equal(t, cache.bucket, "my-bucket")
-
-	_, err = cache.Get(ctx, "nonexistent")
-	assert.Equal(t, autocert.ErrCacheMiss, err)
-
-	b1 := []byte{1}
-	assert.NoError(t, cache.Put(ctx, "dummy", b1))
-
-	b2, err := cache.Get(ctx, "dummy")
-	assert.NoError(t, err)
-	assert.Equal(t, b1, b2)
-
-	assert.NoError(t, cache.Delete(ctx, "dummy"))
-
-	_, err = cache.Get(ctx, "dummy")
-	assert.Equal(t, autocert.ErrCacheMiss, err)
-}
-
 func TestCacheWithPrefix(t *testing.T) {
-	testCache := &testS3{cache: map[string][]byte{}}
-	cache, err := New("", "my-bucket", s3session(testCache), KeyPrefix("/path/to/certs/here"))
-	assert.NoError(t, err)
+	testS3Cache := &testS3{cache: map[string][]byte{}}
+	cache := &Cache{bucket: "my-bucket", s3: testS3Cache}
+	cache.Prefix = "/path/to/certs/here/"
 	ctx := context.Background()
 
 	assert.Equal(t, cache.bucket, "my-bucket")
 
-	_, err = cache.Get(ctx, "nonexistent")
+	_, err := cache.Get(ctx, "nonexistent")
 	assert.Equal(t, autocert.ErrCacheMiss, err)
 
 	b1 := []byte{1}
 	assert.NoError(t, cache.Put(ctx, "dummy", b1))
 
-	assert.Contains(t, testCache.cache, "/path/to/certs/here/dummy")
+	assert.Contains(t, testS3Cache.cache, "/path/to/certs/here/dummy")
 
 	b2, err := cache.Get(ctx, "dummy")
 	assert.NoError(t, err)
