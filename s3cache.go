@@ -1,5 +1,8 @@
 // Copyright (c) 2016 Danilo Bürger <info@danilobuerger.de>
 
+// Package s3cache implements an autocert.Cache to store certificate data within an AWS S3 bucket.
+//
+// See https://godoc.org/golang.org/x/crypto/acme/autocert
 package s3cache
 
 import (
