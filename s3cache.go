@@ -19,12 +19,12 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// Logger for outputing logs
+// Logger for outputing logs.
 type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
-// Making sure that we're adhering to the autocert.Cache interface
+// Making sure that we're adhering to the autocert.Cache interface.
 var _ autocert.Cache = (*Cache)(nil)
 
 // Cache provides a s3 backend to the autocert cache.
@@ -32,7 +32,7 @@ type Cache struct {
 	bucket string
 	s3     s3iface.S3API
 
-	Prefix string // remember to add the trailing slash
+	Prefix string
 
 	Logger Logger
 }
@@ -149,7 +149,7 @@ func (c *Cache) delete(key string) error {
 // Delete removes a certificate data from the cache under the specified key.
 func (c *Cache) Delete(ctx context.Context, key string) error {
 	key = c.Prefix + key
-	c.log("Cache Delete %s", key)
+	c.log("S3 Cache Delete %s", key)
 
 	var (
 		err  error

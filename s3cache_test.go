@@ -94,8 +94,6 @@ func TestCacheWithPrefix(t *testing.T) {
 	cache.Prefix = "/path/to/certs/here/"
 	ctx := context.Background()
 
-	assert.Equal(t, cache.bucket, "my-bucket")
-
 	_, err := cache.Get(ctx, "nonexistent")
 	assert.Equal(t, autocert.ErrCacheMiss, err)
 
