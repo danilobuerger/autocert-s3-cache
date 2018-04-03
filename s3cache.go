@@ -37,7 +37,8 @@ type Cache struct {
 	Logger Logger
 }
 
-// New creates an s3 interface to the autocert cache.
+// New creates an s3 instance that can be used with autocert.Cache.
+// It returns any errors that could happen while connecting to S3.
 func New(region, bucket string) (*Cache, error) {
 	sess, err := session.NewSession(&aws.Config{
 		CredentialsChainVerboseErrors: aws.Bool(true),
