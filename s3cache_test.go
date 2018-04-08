@@ -87,3 +87,27 @@ func TestCache(t *testing.T) {
 	_, err = cache.Get(ctx, "dummy")
 	assert.Equal(t, autocert.ErrCacheMiss, err)
 }
+
+func TestCacheWithPrefix(t *testing.T) {
+	testS3Cache := &testS3{cache: map[string][]byte{}}
+	cache := &Cache{bucket: "my-bucket", s3: testS3Cache}
+	cache.Prefix = "/path/to/certs/here/"
+	ctx := context.Background()
+
+	_, err := cache.Get(ctx, "nonexistent")
+	assert.Equal(t, autocert.ErrCacheMiss, err)
+
+	b1 := []byte{1}
+	assert.NoError(t, cache.Put(ctx, "dummy", b1))
+
+	assert.Contains(t, testS3Cache.cache, "/path/to/certs/here/dummy")
+
+	b2, err := cache.Get(ctx, "dummy")
+	assert.NoError(t, err)
+	assert.Equal(t, b1, b2)
+
+	assert.NoError(t, cache.Delete(ctx, "dummy"))
+
+	_, err = cache.Get(ctx, "dummy")
+	assert.Equal(t, autocert.ErrCacheMiss, err)
+}

@@ -19,22 +19,26 @@ import (
 	"golang.org/x/crypto/acme/autocert"
 )
 
-// Logger logs.
+// Logger for outputing logs.
 type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
+// Making sure that we're adhering to the autocert.Cache interface.
 var _ autocert.Cache = (*Cache)(nil)
 
-// Cache provides an autocert s3 cache.
+// Cache provides a s3 backend to the autocert cache.
 type Cache struct {
 	bucket string
 	s3     s3iface.S3API
 
+	Prefix string
+
 	Logger Logger
 }
 
-// New creates a autocert s3 cache.
+// New creates an s3 instance that can be used with autocert.Cache.
+// It returns any errors that could happen while connecting to S3.
 func New(region, bucket string) (*Cache, error) {
 	sess, err := session.NewSession(&aws.Config{
 		CredentialsChainVerboseErrors: aws.Bool(true),
@@ -54,7 +58,7 @@ func (c *Cache) log(format string, v ...interface{}) {
 	if c.Logger == nil {
 		return
 	}
-	c.Logger.Printf(format, v)
+	c.Logger.Printf(format, v...)
 }
 
 func (c *Cache) get(key string) ([]byte, error) {
@@ -72,7 +76,8 @@ func (c *Cache) get(key string) ([]byte, error) {
 
 // Get returns a certificate data for the specified key.
 func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
-	c.log("Cache Get %s", key)
+	key = c.Prefix + key
+	c.log("S3 Cache Get %s", key)
 
 	var (
 		data []byte
@@ -112,7 +117,8 @@ func (c *Cache) put(key string, data []byte) error {
 
 // Put stores the data in the cache under the specified key.
 func (c *Cache) Put(ctx context.Context, key string, data []byte) error {
-	c.log("Cache Put %s", key)
+	key = c.Prefix + key
+	c.log("S3 Cache Put %s", key)
 
 	var (
 		err  error
@@ -143,7 +149,8 @@ func (c *Cache) delete(key string) error {
 
 // Delete removes a certificate data from the cache under the specified key.
 func (c *Cache) Delete(ctx context.Context, key string) error {
-	c.log("Cache Delete %s", key)
+	key = c.Prefix + key
+	c.log("S3 Cache Delete %s", key)
 
 	var (
 		err  error
