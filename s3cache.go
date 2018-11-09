@@ -13,6 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3iface"
@@ -48,9 +49,19 @@ func New(region, bucket string) (*Cache, error) {
 		return nil, err
 	}
 
+	return NewWithProvider(sess, bucket)
+}
+
+// NewWithProvider creates a new s3 autocert.Cache from a client.ConfigProvider.
+func NewWithProvider(p client.ConfigProvider, bucket string) (*Cache, error) {
+	return NewWithS3(s3.New(p), bucket)
+}
+
+// NewWithS3 creates a new s3 autocert.Cache from a s3iface.S3API.
+func NewWithS3(s3 s3iface.S3API, bucket string) (*Cache, error) {
 	return &Cache{
 		bucket: bucket,
-		s3:     s3.New(sess),
+		s3:     s3,
 	}, nil
 }
 
