@@ -30,12 +30,13 @@ var _ autocert.Cache = (*Cache)(nil)
 
 // Cache provides a s3 backend to the autocert cache.
 type Cache struct {
+	// Prefix is used to prefix every objects key cached in s3.
+	Prefix string
+	// Logger is used for debug logging.
+	Logger Logger
+
 	bucket string
 	s3     s3iface.S3API
-
-	Prefix string
-
-	Logger Logger
 }
 
 // New creates an s3 instance that can be used with autocert.Cache.
